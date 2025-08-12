@@ -138,14 +138,14 @@ void application_init(void)
 
     twr_led_init_virtual(&led_lcd_red, TWR_MODULE_LCD_LED_RED, twr_module_lcd_get_led_driver(), true);
 
-    // Initialize bucket state with empty bucket and no data
+    // Initialize bucket state with empty bucket and dummy data for layout testing
     bucket_state.bucket_full = false;
-    bucket_state.has_data = false;
-    strncpy(bucket_state.sensor_battery, "--", sizeof(bucket_state.sensor_battery));
-    strncpy(bucket_state.display_battery, "--", sizeof(bucket_state.display_battery));
-    strncpy(bucket_state.updated_date, "--", sizeof(bucket_state.updated_date));
-    strncpy(bucket_state.emptied_date, "--", sizeof(bucket_state.emptied_date));
-    strncpy(bucket_state.estimate_date, "--", sizeof(bucket_state.estimate_date));
+    bucket_state.has_data = true;  // Show dummy values instead of "--"
+    strncpy(bucket_state.sensor_battery, "2.6V", sizeof(bucket_state.sensor_battery));
+    strncpy(bucket_state.display_battery, "3.1V", sizeof(bucket_state.display_battery));
+    strncpy(bucket_state.updated_date, "12.10. 13:00", sizeof(bucket_state.updated_date));  // Longest possible
+    strncpy(bucket_state.emptied_date, "5.9.", sizeof(bucket_state.emptied_date));
+    strncpy(bucket_state.estimate_date, "15.10.", sizeof(bucket_state.estimate_date));
 
     twr_radio_pairing_request("bucket-monitor", FW_VERSION);
 
