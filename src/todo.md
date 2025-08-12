@@ -1,0 +1,2 @@
+- [ ] Implement simple screen state with mocked values for now (when bucket is empty)
+- [ ] Implement switch of empty and full state with black on white and white on black drawing
