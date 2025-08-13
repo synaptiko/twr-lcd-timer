@@ -77,13 +77,6 @@ void update_display(void)
         twr_gfx_draw_fill_rectangle(pgfx, 0, 0, 127, 127, COLOR_BLACK);
     }
 
-    // Set font for all text
-    twr_gfx_set_font(pgfx, &twr_font_ubuntu_13);
-
-    // Line spacing
-    int line_height = 15;
-    int start_y = 10;
-
     // Display labels and values
     const char* updated_val = bucket_state.has_data ? bucket_state.updated_date : "--";
     const char* emptied_val = bucket_state.has_data ? bucket_state.emptied_date : "--";
@@ -91,35 +84,67 @@ void update_display(void)
     const char* sensor_val = bucket_state.has_data ? bucket_state.sensor_battery : "--";
     const char* display_val = bucket_state.has_data ? bucket_state.display_battery : "--";
 
-    // Line 1: Updated
-    twr_gfx_draw_string(pgfx, 5, start_y, "Updated", text_color);
+    int y_pos = 5;  // Starting position
+
+    // Line 1: Updated label (bigger font)
+    twr_gfx_set_font(pgfx, &twr_font_ubuntu_24);
+    twr_gfx_draw_string(pgfx, 5, y_pos, "Updated", text_color);
+    y_pos += 26;  // Space for bigger font
+
+    // Line 2: Updated value (medium font, right-aligned)
+    twr_gfx_set_font(pgfx, &twr_font_ubuntu_15);
     int updated_width = twr_gfx_calc_string_width(pgfx, (char*)updated_val);
-    twr_gfx_draw_string(pgfx, 128 - updated_width - 5, start_y, (char*)updated_val, text_color);
+    twr_gfx_draw_string(pgfx, 128 - updated_width - 5, y_pos, (char*)updated_val, text_color);
+    y_pos += 25;  // Extra space after updated section
 
-    // Line 2: Emptied
-    twr_gfx_draw_string(pgfx, 5, start_y + line_height, "Emptied", text_color);
+    // Switch to smaller font for remaining items
+    twr_gfx_set_font(pgfx, &twr_font_ubuntu_13);
+    int small_line_height = 17;  // Slightly more spacing for better readability
+
+    // Line 3: Emptied
+    twr_gfx_draw_string(pgfx, 5, y_pos, "Emptied", text_color);
     int emptied_width = twr_gfx_calc_string_width(pgfx, (char*)emptied_val);
-    twr_gfx_draw_string(pgfx, 128 - emptied_width - 5, start_y + line_height, (char*)emptied_val, text_color);
+    twr_gfx_draw_string(pgfx, 128 - emptied_width - 5, y_pos, (char*)emptied_val, text_color);
+    y_pos += small_line_height;
 
-    // Line 3: Estimate
-    twr_gfx_draw_string(pgfx, 5, start_y + 2 * line_height, "Estimate", text_color);
+    // Line 4: Estimate
+    twr_gfx_draw_string(pgfx, 5, y_pos, "Estimate", text_color);
     int estimate_width = twr_gfx_calc_string_width(pgfx, (char*)estimate_val);
-    twr_gfx_draw_string(pgfx, 128 - estimate_width - 5, start_y + 2 * line_height, (char*)estimate_val, text_color);
+    twr_gfx_draw_string(pgfx, 128 - estimate_width - 5, y_pos, (char*)estimate_val, text_color);
+    y_pos += small_line_height;
 
-    // Line 4: Sensor
-    twr_gfx_draw_string(pgfx, 5, start_y + 3 * line_height, "Sensor", text_color);
+    // Line 5: Sensor
+    twr_gfx_draw_string(pgfx, 5, y_pos, "Sensor", text_color);
     int sensor_width = twr_gfx_calc_string_width(pgfx, (char*)sensor_val);
-    twr_gfx_draw_string(pgfx, 128 - sensor_width - 5, start_y + 3 * line_height, (char*)sensor_val, text_color);
+    twr_gfx_draw_string(pgfx, 128 - sensor_width - 5, y_pos, (char*)sensor_val, text_color);
+    y_pos += small_line_height;
 
-    // Line 5: Display
-    twr_gfx_draw_string(pgfx, 5, start_y + 4 * line_height, "Display", text_color);
+    // Line 6: Display
+    twr_gfx_draw_string(pgfx, 5, y_pos, "Display", text_color);
     int display_width = twr_gfx_calc_string_width(pgfx, (char*)display_val);
-    twr_gfx_draw_string(pgfx, 128 - display_width - 5, start_y + 4 * line_height, (char*)display_val, text_color);
+    twr_gfx_draw_string(pgfx, 128 - display_width - 5, y_pos, (char*)display_val, text_color);
 
     // Update the display
     twr_gfx_update(pgfx);
 
     twr_system_pll_disable();
+}
+
+void lcd_button_event_handler(twr_module_lcd_event_t event, void *event_param)
+{
+    (void) event_param;
+
+    if (event == TWR_MODULE_LCD_EVENT_LEFT_CLICK)
+    {
+        // Toggle bucket state for testing
+        bucket_state.bucket_full = !bucket_state.bucket_full;
+        
+        // Update display immediately
+        update_display();
+        
+        // Pulse LED to indicate button press
+        twr_led_pulse(&led_lcd_red, 100);
+    }
 }
 
 void application_init(void)
@@ -135,6 +160,9 @@ void application_init(void)
 
     twr_module_lcd_init();
     pgfx = twr_module_lcd_get_gfx();
+    
+    // Set up LCD button event handler
+    twr_module_lcd_set_event_handler(lcd_button_event_handler, NULL);
 
     twr_led_init_virtual(&led_lcd_red, TWR_MODULE_LCD_LED_RED, twr_module_lcd_get_led_driver(), true);
 
