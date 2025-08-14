@@ -1,419 +1,300 @@
 #include <application.h>
-// #include <string.h>
 
-// #define BATTERY_UPDATE_INTERVAL (60 * 60 * 1000)
+#define SERVICE_INTERVAL_INTERVAL (60 * 60 * 1000)
+#define BATTERY_UPDATE_INTERVAL (60 * 60 * 1000)
 
-// #define COLOR_BLACK true
-// #define COLOR_WHITE false
+#define TEMPERATURE_TAG_PUB_NO_CHANGE_INTEVAL (15 * 60 * 1000)
+#define TEMPERATURE_TAG_PUB_VALUE_CHANGE 0.2f
+#define TEMPERATURE_UPDATE_SERVICE_INTERVAL (5 * 1000)
+#define TEMPERATURE_UPDATE_NORMAL_INTERVAL (10 * 1000)
 
-// typedef struct {
-//     bool bucket_full;
-//     char updated_date[16];    // "DD.MM. HH:MM"
-//     char emptied_date[16];    // "DD.MM."
-//     char estimate_date[16];   // "DD.MM."
-//     char sensor_battery[8];   // "2.6V" or "LOW" or "CRI"
-//     char display_battery[8];  // "2.6V" or "LOW" or "CRI"
-//     bool has_data;            // true when we have received first update
-// } bucket_state_t;
+#define SET_TEMPERATURE_PUB_INTERVAL 15 * 60 * 1000;
+#define SET_TEMPERATURE_ADD_ON_CLICK 0.5f
 
-// float battery_voltage = 0.0f;
-// bool battery_low = false;
-// bool battery_critical = false;
-// bucket_state_t bucket_state = {0};
+#define EEPROM_SET_TEMPERATURE_ADDRESS 0
+#define APPLICATION_TASK_ID 0
 
-// twr_led_t led_lcd_red;
-twr_led_t led_lcd_green;
-// twr_led_t led_lcd_blue;
-// twr_gfx_t *pgfx;
+#define COLOR_BLACK true
 
-// // Alert system state
-// typedef struct {
-//     bool alert_active;
-//     bool alert_acknowledged;
-//     twr_tick_t last_update_time;
-//     twr_tick_t alert_blink_start;
-//     uint8_t blink_count;
-// } alert_state_t;
+twr_led_t led;
+twr_led_t led_lcd_red;
+twr_led_t led_lcd_blue;
 
-// alert_state_t alert = {0};
+// Thermometer instance
+twr_tmp112_t tmp112;
+event_param_t temperature_event_param = { .next_pub = 0, .value = NAN };
+event_param_t temperature_set_point;
+float temperature_on_display = NAN;
 
-void process_bucket_response(uint64_t *id, const char *topic, void *value, void *param);
+#if ROTATE_SUPPORT
+twr_lis2dh12_t lis2dh12;
+twr_dice_t dice;
+twr_dice_face_t face = TWR_DICE_FACE_UNKNOWN;
+twr_module_lcd_rotation_t rotation = TWR_MODULE_LCD_ROTATION_0;
+#endif
 
-static const twr_radio_sub_t subs[] = {
-    {"bucket/response", TWR_RADIO_SUB_PT_STRING, process_bucket_response, (void *) 1},
-};
-
-// void check_alert_conditions(void)
-// {
-//     bool should_alert = false;
-
-//     // Check for alert conditions
-//     if (bucket_state.bucket_full)
-//     {
-//         should_alert = true; // Full bucket
-//     }
-//     else if (battery_critical ||
-//              (bucket_state.has_data &&
-//               (strcmp(bucket_state.sensor_battery, "CRI") == 0 ||
-//                strcmp(bucket_state.display_battery, "CRI") == 0)))
-//     {
-//         should_alert = true; // Critical battery
-//     }
-//     else if (bucket_state.has_data &&
-//              (twr_tick_get() - alert.last_update_time) > (3 * 60 * 60 * 1000))
-//     {
-//         should_alert = true; // No update for 3+ hours
-//     }
-
-//     // Start new alert if conditions are met and not already acknowledged
-//     if (should_alert && !alert.alert_acknowledged)
-//     {
-//         if (!alert.alert_active)
-//         {
-//             alert.alert_active = true;
-//             alert.alert_blink_start = twr_tick_get();
-//             alert.blink_count = 0;
-//         }
-//     }
-//     else if (!should_alert)
-//     {
-//         // Clear alert if conditions are resolved
-//         alert.alert_active = false;
-//         alert.alert_acknowledged = false;
-//     }
-// }
-
-// void update_alert_leds(void)
-// {
-//     if (!alert.alert_active) return;
-
-//     twr_tick_t now = twr_tick_get();
-//     twr_tick_t elapsed = now - alert.alert_blink_start;
-
-//     // Blink 20 times at 2-second intervals, every 15 minutes
-//     if (elapsed < (20 * 2000)) // First 40 seconds of 15-minute cycle
-//     {
-//         bool led_on = (elapsed % 2000) < 100; // 100ms pulses
-
-//         if (led_on)
-//         {
-//             twr_led_set_mode(&led_lcd_red, TWR_LED_MODE_ON);
-//             twr_led_set_mode(&led_lcd_green, TWR_LED_MODE_ON);
-//             twr_led_set_mode(&led_lcd_blue, TWR_LED_MODE_ON);
-//         }
-//         else
-//         {
-//             twr_led_set_mode(&led_lcd_red, TWR_LED_MODE_OFF);
-//             twr_led_set_mode(&led_lcd_green, TWR_LED_MODE_OFF);
-//             twr_led_set_mode(&led_lcd_blue, TWR_LED_MODE_OFF);
-//         }
-//     }
-//     else if (elapsed >= (15 * 60 * 1000)) // Reset every 15 minutes
-//     {
-//         alert.alert_blink_start = now;
-//     }
-//     else
-//     {
-//         // Between blink cycles - LEDs off
-//         twr_led_set_mode(&led_lcd_red, TWR_LED_MODE_OFF);
-//         twr_led_set_mode(&led_lcd_green, TWR_LED_MODE_OFF);
-//         twr_led_set_mode(&led_lcd_blue, TWR_LED_MODE_OFF);
-//     }
-// }
-
-// void battery_event_handler(twr_module_battery_event_t event, void *event_param)
-// {
-//     if (event == TWR_MODULE_BATTERY_EVENT_UPDATE)
-//     {
-//         twr_module_battery_get_voltage(&battery_voltage);
-
-//         // Update display battery status
-//         if (battery_critical)
-//         {
-//             strncpy(bucket_state.display_battery, "CRI", sizeof(bucket_state.display_battery));
-//         }
-//         else if (battery_low)
-//         {
-//             strncpy(bucket_state.display_battery, "LOW", sizeof(bucket_state.display_battery));
-//         }
-//         else
-//         {
-//             snprintf(bucket_state.display_battery, sizeof(bucket_state.display_battery), "%.1fV", battery_voltage);
-//         }
-//     }
-//     else if (event == TWR_MODULE_BATTERY_EVENT_LEVEL_LOW)
-//     {
-//         battery_low = true;
-//         strncpy(bucket_state.display_battery, "LOW", sizeof(bucket_state.display_battery));
-//     }
-//     else if (event == TWR_MODULE_BATTERY_EVENT_LEVEL_CRITICAL)
-//     {
-//         battery_critical = true;
-//         strncpy(bucket_state.display_battery, "CRI", sizeof(bucket_state.display_battery));
-//     }
-// }
-
-// void update_display(void)
-// {
-//     if (!twr_module_lcd_is_ready())
-//     {
-//         return;
-//     }
-
-//     twr_system_pll_enable();
-
-//     // Clear display
-//     twr_gfx_clear(pgfx);
-
-//     // Set colors based on bucket state
-//     bool text_color = bucket_state.bucket_full ? COLOR_WHITE : COLOR_BLACK;
-
-//     // Fill background if bucket is full (white text on black background)
-//     if (bucket_state.bucket_full)
-//     {
-//         twr_gfx_draw_fill_rectangle(pgfx, 0, 0, 127, 127, COLOR_BLACK);
-//     }
-
-//     // Display labels and values
-//     const char* updated_val = bucket_state.has_data ? bucket_state.updated_date : "--";
-//     const char* emptied_val = bucket_state.has_data ? bucket_state.emptied_date : "--";
-//     const char* estimate_val = bucket_state.has_data ? bucket_state.estimate_date : "--";
-//     const char* sensor_val = bucket_state.has_data ? bucket_state.sensor_battery : "--";
-//     const char* display_val = bucket_state.has_data ? bucket_state.display_battery : "--";
-
-//     int y_pos = 5;  // Starting position
-
-//     // Line 1: Updated label (bigger font)
-//     twr_gfx_set_font(pgfx, &twr_font_ubuntu_24);
-//     twr_gfx_draw_string(pgfx, 5, y_pos, "Updated", text_color);
-//     y_pos += 26;  // Space for bigger font
-
-//     // Line 2: Updated value (medium font, right-aligned)
-//     twr_gfx_set_font(pgfx, &twr_font_ubuntu_15);
-//     int updated_width = twr_gfx_calc_string_width(pgfx, (char*)updated_val);
-//     twr_gfx_draw_string(pgfx, 128 - updated_width - 5, y_pos, (char*)updated_val, text_color);
-//     y_pos += 25;  // Extra space after updated section
-
-//     // Switch to smaller font for remaining items
-//     twr_gfx_set_font(pgfx, &twr_font_ubuntu_13);
-//     int small_line_height = 17;  // Slightly more spacing for better readability
-
-//     // Line 3: Emptied
-//     twr_gfx_draw_string(pgfx, 5, y_pos, "Emptied", text_color);
-//     int emptied_width = twr_gfx_calc_string_width(pgfx, (char*)emptied_val);
-//     twr_gfx_draw_string(pgfx, 128 - emptied_width - 5, y_pos, (char*)emptied_val, text_color);
-//     y_pos += small_line_height;
-
-//     // Line 4: Estimate
-//     twr_gfx_draw_string(pgfx, 5, y_pos, "Estimate", text_color);
-//     int estimate_width = twr_gfx_calc_string_width(pgfx, (char*)estimate_val);
-//     twr_gfx_draw_string(pgfx, 128 - estimate_width - 5, y_pos, (char*)estimate_val, text_color);
-//     y_pos += small_line_height;
-
-//     // Line 5: Sensor
-//     twr_gfx_draw_string(pgfx, 5, y_pos, "Sensor", text_color);
-//     int sensor_width = twr_gfx_calc_string_width(pgfx, (char*)sensor_val);
-//     twr_gfx_draw_string(pgfx, 128 - sensor_width - 5, y_pos, (char*)sensor_val, text_color);
-//     y_pos += small_line_height;
-
-//     // Line 6: Display
-//     twr_gfx_draw_string(pgfx, 5, y_pos, "Display", text_color);
-//     int display_width = twr_gfx_calc_string_width(pgfx, (char*)display_val);
-//     twr_gfx_draw_string(pgfx, 128 - display_width - 5, y_pos, (char*)display_val, text_color);
-
-//     // Update the display
-//     twr_gfx_update(pgfx);
-
-//     twr_system_pll_disable();
-// }
-
-// void parse_bucket_status_response(const char *csv_data)
-// {
-//     if (csv_data == NULL) return;
-
-//     // Make a copy since strtok modifies the string
-//     char buffer[128];
-//     strncpy(buffer, csv_data, sizeof(buffer) - 1);
-//     buffer[sizeof(buffer) - 1] = '\0';
-
-//     char *token = strtok(buffer, ",");
-//     int field = 0;
-
-//     while (token != NULL && field < 6)
-//     {
-//         switch (field)
-//         {
-//             case 0: // Bucket state: "empty" or "full"
-//                 bucket_state.bucket_full = (strcmp(token, "full") == 0);
-//                 break;
-
-//             case 1: // Current date/time: "DD.MM. HH:MM"
-//                 strncpy(bucket_state.updated_date, token, sizeof(bucket_state.updated_date) - 1);
-//                 bucket_state.updated_date[sizeof(bucket_state.updated_date) - 1] = '\0';
-//                 break;
-
-//             case 2: // Sensor battery: "2.6V", "LOW", or "CRI"
-//                 strncpy(bucket_state.sensor_battery, token, sizeof(bucket_state.sensor_battery) - 1);
-//                 bucket_state.sensor_battery[sizeof(bucket_state.sensor_battery) - 1] = '\0';
-//                 break;
-
-//             case 3: // Display battery: "2.6V", "LOW", or "CRI"
-//                 strncpy(bucket_state.display_battery, token, sizeof(bucket_state.display_battery) - 1);
-//                 bucket_state.display_battery[sizeof(bucket_state.display_battery) - 1] = '\0';
-//                 break;
-
-//             case 4: // Last emptied date: "DD.MM."
-//                 strncpy(bucket_state.emptied_date, token, sizeof(bucket_state.emptied_date) - 1);
-//                 bucket_state.emptied_date[sizeof(bucket_state.emptied_date) - 1] = '\0';
-//                 break;
-
-//             case 5: // Estimated full date: "DD.MM."
-//                 strncpy(bucket_state.estimate_date, token, sizeof(bucket_state.estimate_date) - 1);
-//                 bucket_state.estimate_date[sizeof(bucket_state.estimate_date) - 1] = '\0';
-//                 break;
-
-//             default:
-//                 // Ignore extra fields
-//                 break;
-//         }
-
-//         token = strtok(NULL, ",");
-//         field++;
-//     }
-
-//     // Mark that we have received valid data and update timestamp
-//     bucket_state.has_data = true;
-//     alert.last_update_time = twr_tick_get();
-// }
-
-void process_bucket_response(uint64_t *id, const char *topic, void *value, void *param)
+#if CORE_R == 2
+twr_module_lcd_rotation_t face_2_lcd_rotation_lut[7] =
 {
-    // (void) id; // Unused - we accept from any gateway
+    [TWR_DICE_FACE_2] = TWR_MODULE_LCD_ROTATION_270,
+    [TWR_DICE_FACE_3] = TWR_MODULE_LCD_ROTATION_180,
+    [TWR_DICE_FACE_4] = TWR_MODULE_LCD_ROTATION_0,
+    [TWR_DICE_FACE_5] = TWR_MODULE_LCD_ROTATION_90
+};
+#else
+twr_module_lcd_rotation_t face_2_lcd_rotation_lut[7] =
+{
+    [TWR_DICE_FACE_2] = TWR_MODULE_LCD_ROTATION_90,
+    [TWR_DICE_FACE_3] = TWR_MODULE_LCD_ROTATION_0,
+    [TWR_DICE_FACE_4] = TWR_MODULE_LCD_ROTATION_180,
+    [TWR_DICE_FACE_5] = TWR_MODULE_LCD_ROTATION_270
+};
+#endif
 
-    // TODO: remove, temporary for testing
-    twr_led_pulse(&led_lcd_green, 1000);
+void radio_pub_set_temperature(void)
+{
+    temperature_set_point.next_pub = twr_scheduler_get_spin_tick() + SET_TEMPERATURE_PUB_INTERVAL;
 
-    // if (strcmp(subtopic, "bucket/response") == 0 && value != NULL)
-    // {
-    //     // Parse the CSV response and update bucket state
-    //     parse_bucket_status_response(value);
-
-    //     // Update display with new data
-    //     update_display();
-
-    //     // Pulse blue LED to indicate successful update
-    //     twr_led_pulse(&led_lcd_blue, 50);
-    // }
+    twr_radio_pub_temperature(TWR_RADIO_PUB_CHANNEL_SET_POINT, &temperature_set_point.value);
 }
 
-// void request_bucket_status(void)
-// {
-//     // Send bucket status request message
-//     if (twr_radio_pub_string("bucket/request", "status"))
-//     {
-//         // Pulse blue LED to indicate request sent successfully
-//         twr_led_pulse(&led_lcd_blue, 100);
-//     }
-//     else
-//     {
-//         // Pulse red LED to indicate transmission failed
-//         twr_led_pulse(&led_lcd_red, 200);
-//     }
-// }
+void tmp112_event_handler(twr_tmp112_t *self, twr_tmp112_event_t event, void *event_param)
+{
+    float value;
+    event_param_t *param = (event_param_t *)event_param;
 
-// void lcd_button_event_handler(twr_module_lcd_event_t event, void *event_param)
-// {
-//     (void) event_param;
+    if (event != TWR_TMP112_EVENT_UPDATE)
+    {
+        return;
+    }
 
-//     if (event == TWR_MODULE_LCD_EVENT_LEFT_CLICK)
-//     {
-//         // Button 1: Request immediate status update
-//         request_bucket_status();
-//     }
-//     else if (event == TWR_MODULE_LCD_EVENT_LEFT_HOLD) {
-//         twr_radio_pairing_request("bucket-monitor", FW_VERSION);
+    if (twr_tmp112_get_temperature_celsius(self, &value))
+    {
+        if ((fabsf(value - param->value) >= TEMPERATURE_TAG_PUB_VALUE_CHANGE) || (param->next_pub < twr_scheduler_get_spin_tick()))
+        {
+            twr_radio_pub_temperature(TWR_RADIO_PUB_CHANNEL_R1_I2C0_ADDRESS_ALTERNATE, &value);
+            param->value = value;
+            param->next_pub = twr_scheduler_get_spin_tick() + TEMPERATURE_TAG_PUB_NO_CHANGE_INTEVAL;
+        }
+    }
+    else
+    {
+        param->value = NAN;
+    }
 
-//         twr_led_pulse(&led_lcd_green, 2000);
-//     }
-//     else if (event == TWR_MODULE_LCD_EVENT_RIGHT_CLICK)
-//     {
-//         // Button 2: Acknowledge alert (stops LED blinking)
-//         if (alert.alert_active)
-//         {
-//             alert.alert_acknowledged = true;
-//             alert.alert_active = false;
+    if (temperature_set_point.next_pub < twr_scheduler_get_spin_tick())
+    {
+        radio_pub_set_temperature();
+    }
 
-//             // Turn off all LEDs
-//             twr_led_set_mode(&led_lcd_red, TWR_LED_MODE_OFF);
-//             twr_led_set_mode(&led_lcd_green, TWR_LED_MODE_OFF);
-//             twr_led_set_mode(&led_lcd_blue, TWR_LED_MODE_OFF);
+    if ((fabsf(param->value - temperature_on_display) >= 0.1) || isnan(temperature_on_display))
+    {
+        twr_scheduler_plan_now(APPLICATION_TASK_ID);
+    }
+}
 
-//             // Brief green pulse to confirm acknowledgment
-//             twr_led_pulse(&led_lcd_green, 200);
-//         }
-//         else
-//         {
-//             // Toggle bucket state for testing when no alert active
-//             bucket_state.bucket_full = !bucket_state.bucket_full;
-//             update_display();
-//             twr_led_pulse(&led_lcd_red, 100);
-//         }
-//     }
-// }
+void on_lcd_button_click(void)
+{
+    radio_pub_set_temperature();
+
+    // Save set temperature to eeprom
+    uint32_t neg_set_temperature;
+    float *set_temperature = (float *) &neg_set_temperature;
+
+    *set_temperature = temperature_set_point.value;
+
+    neg_set_temperature = ~neg_set_temperature;
+
+    twr_eeprom_write(EEPROM_SET_TEMPERATURE_ADDRESS, &temperature_set_point.value, sizeof(temperature_set_point.value));
+    twr_eeprom_write(EEPROM_SET_TEMPERATURE_ADDRESS + sizeof(temperature_set_point.value), &neg_set_temperature, sizeof(neg_set_temperature));
+
+    twr_scheduler_plan_now(APPLICATION_TASK_ID);
+}
+
+void lcd_button_left_event_handler(twr_button_t *self, twr_button_event_t event, void *event_param)
+{
+    if (event == TWR_BUTTON_EVENT_CLICK)
+	{
+
+        temperature_set_point.value -= SET_TEMPERATURE_ADD_ON_CLICK;
+
+        static uint16_t left_event_count = 0;
+
+        left_event_count++;
+
+        twr_radio_pub_event_count(TWR_RADIO_PUB_EVENT_LCD_BUTTON_LEFT, &left_event_count);
+
+        twr_led_pulse(&led_lcd_blue, 30);
+
+        on_lcd_button_click();
+    }
+}
+
+void lcd_button_right_event_handler(twr_button_t *self, twr_button_event_t event, void *event_param)
+{
+    (void) event_param;
+
+	if (event == TWR_BUTTON_EVENT_CLICK)
+	{
+
+        temperature_set_point.value += SET_TEMPERATURE_ADD_ON_CLICK;
+
+        static uint16_t right_event_count = 0;
+
+        right_event_count++;
+
+        twr_radio_pub_event_count(TWR_RADIO_PUB_EVENT_LCD_BUTTON_RIGHT, &right_event_count);
+
+        twr_led_pulse(&led_lcd_red, 30);
+
+        on_lcd_button_click();
+    }
+}
+
+#if ROTATE_SUPPORT
+void lis2dh12_event_handler(twr_lis2dh12_t *self, twr_lis2dh12_event_t event, void *event_param)
+{
+    (void) event_param;
+
+    if (event == TWR_LIS2DH12_EVENT_UPDATE)
+    {
+        twr_lis2dh12_result_g_t result;
+
+        twr_lis2dh12_get_result_g(self, &result);
+
+        twr_dice_feed_vectors(&dice, result.x_axis, result.y_axis, result.z_axis);
+
+        face = twr_dice_get_face(&dice);
+
+        if (face > TWR_DICE_FACE_1 && face < TWR_DICE_FACE_6)
+        {
+            rotation = face_2_lcd_rotation_lut[face];
+
+            twr_scheduler_plan_now(APPLICATION_TASK_ID);
+        }
+    }
+}
+#endif
+
+void battery_event_handler(twr_module_battery_event_t event, void *event_param)
+{
+    (void) event_param;
+
+    float voltage;
+
+    if (event == TWR_MODULE_BATTERY_EVENT_UPDATE)
+    {
+        if (twr_module_battery_get_voltage(&voltage))
+        {
+            twr_radio_pub_battery(&voltage);
+        }
+    }
+}
+
+void switch_to_normal_mode_task(void *param)
+{
+    twr_tmp112_set_update_interval(&tmp112, TEMPERATURE_UPDATE_NORMAL_INTERVAL);
+
+    twr_scheduler_unregister(twr_scheduler_get_current_task_id());
+}
 
 void application_init(void)
 {
-    // Disable sleep in case of receiving data
-    twr_system_deep_sleep_disable();
+    // Initialize LED on core module
+    twr_led_init(&led, TWR_GPIO_LED, false, false);
+    twr_led_set_mode(&led, TWR_LED_MODE_OFF);
 
-    twr_radio_init(TWR_RADIO_MODE_NODE_LISTENING);
-    // twr_radio_init(TWR_RADIO_MODE_NODE_SLEEPING);
-    // TODO: change to 400ms later on
-    twr_radio_set_subs((twr_radio_sub_t *) subs, sizeof(subs)/sizeof(twr_radio_sub_t));
-    // twr_radio_set_rx_timeout_for_sleeping_node(2000);
+    // Load set temperature from eeprom
+    uint32_t neg_set_temperature;
+    float *set_temperature = (float *) &neg_set_temperature;
 
-    twr_radio_pairing_request("bucket-monitor", FW_VERSION);
+    twr_eeprom_read(EEPROM_SET_TEMPERATURE_ADDRESS, &temperature_set_point.value, sizeof(temperature_set_point.value));
+    twr_eeprom_read(EEPROM_SET_TEMPERATURE_ADDRESS + sizeof(temperature_set_point.value), &neg_set_temperature, sizeof(neg_set_temperature));
 
-    // twr_module_battery_init();
-    // twr_module_battery_set_event_handler(battery_event_handler, NULL);
-    // twr_module_battery_set_update_interval(BATTERY_UPDATE_INTERVAL);
+    neg_set_temperature = ~neg_set_temperature;
 
-    // twr_module_lcd_init();
-    // pgfx = twr_module_lcd_get_gfx();
+    if (temperature_set_point.value != *set_temperature)
+    {
+        temperature_set_point.value = 21.0f;
+    }
 
-    // // Set up LCD button event handler
-    // twr_module_lcd_set_event_handler(lcd_button_event_handler, NULL);
+    // Initialize Radio
+    twr_radio_init(TWR_RADIO_MODE_NODE_SLEEPING);
 
-    // twr_led_init_virtual(&led_lcd_red, TWR_MODULE_LCD_LED_RED, twr_module_lcd_get_led_driver(), true);
-    twr_led_init_virtual(&led_lcd_green, TWR_MODULE_LCD_LED_GREEN, twr_module_lcd_get_led_driver(), true);
-    // twr_led_init_virtual(&led_lcd_blue, TWR_MODULE_LCD_LED_BLUE, twr_module_lcd_get_led_driver(), true);
+    // Initialize battery
+    twr_module_battery_init();
+    twr_module_battery_set_event_handler(battery_event_handler, NULL);
+    twr_module_battery_set_update_interval(BATTERY_UPDATE_INTERVAL);
 
-    // // Initialize bucket state with empty bucket and dummy data for layout testing
-    // bucket_state.bucket_full = false;
-    // bucket_state.has_data = true;  // Show dummy values instead of "--"
-    // strncpy(bucket_state.sensor_battery, "2.6V", sizeof(bucket_state.sensor_battery));
-    // strncpy(bucket_state.display_battery, "3.1V", sizeof(bucket_state.display_battery));
-    // strncpy(bucket_state.updated_date, "12.10. 13:00", sizeof(bucket_state.updated_date));  // Longest possible
-    // strncpy(bucket_state.emptied_date, "5.9.", sizeof(bucket_state.emptied_date));
-    // strncpy(bucket_state.estimate_date, "15.10.", sizeof(bucket_state.estimate_date));
+    // Initialize thermometer sensor on core module
+    twr_tmp112_init(&tmp112, TWR_I2C_I2C0, 0x49);
+    twr_tmp112_set_event_handler(&tmp112, tmp112_event_handler, &temperature_event_param);
+    twr_tmp112_set_update_interval(&tmp112, TEMPERATURE_UPDATE_SERVICE_INTERVAL);
 
-    // // Initialize alert system
-    // alert.last_update_time = twr_tick_get();
+    // Initialize LCD
+    twr_module_lcd_init();
 
-    // // Initial display update
-    // update_display();
+    // Initialize LCD button left
+    static twr_button_t lcd_left;
+    twr_button_init_virtual(&lcd_left, TWR_MODULE_LCD_BUTTON_LEFT, twr_module_lcd_get_button_driver(), false);
+    twr_button_set_event_handler(&lcd_left, lcd_button_left_event_handler, NULL);
 
-    twr_led_pulse(&led_lcd_green, 2000);
-    // // Example message to send:
-    // // node/bucket-monitor:0/bucket/response "full,13.10. 13:00,2.6V,3.1V,5.9.,15.10."
+    // Initialize LCD button right
+    static twr_button_t lcd_right;
+    twr_button_init_virtual(&lcd_right, TWR_MODULE_LCD_BUTTON_RIGHT, twr_module_lcd_get_button_driver(), false);
+    twr_button_set_event_handler(&lcd_right, lcd_button_right_event_handler, NULL);
+
+    // Initialize red and blue LED on LCD module
+    twr_led_init_virtual(&led_lcd_red, TWR_MODULE_LCD_LED_RED, twr_module_lcd_get_led_driver(), true);
+    twr_led_init_virtual(&led_lcd_blue, TWR_MODULE_LCD_LED_BLUE, twr_module_lcd_get_led_driver(), true);
+
+#if ROTATE_SUPPORT
+    // Initialize Accelerometer
+    twr_dice_init(&dice, TWR_DICE_FACE_UNKNOWN);
+    twr_lis2dh12_init(&lis2dh12, TWR_I2C_I2C0, 0x19);
+    twr_lis2dh12_set_update_interval(&lis2dh12, 5 * 1000);
+    twr_lis2dh12_set_event_handler(&lis2dh12, lis2dh12_event_handler, NULL);
+#endif
+
+    twr_radio_pairing_request("lcd-thermostat", FW_VERSION);
+
+    twr_scheduler_register(switch_to_normal_mode_task, NULL, SERVICE_INTERVAL_INTERVAL);
+
+    twr_led_pulse(&led, 2000);
 }
 
-// void application_task(void)
-// {
-//     // Check alert conditions and update LEDs
-//     check_alert_conditions();
-//     update_alert_leds();
+void application_task(void)
+{
+    static char str_temperature[10];
 
-//     // Update display periodically - called by scheduler when needed
-//     update_display();
-// }
+    if (!twr_module_lcd_is_ready())
+    {
+    	return;
+    }
+
+    twr_system_pll_enable();
+
+#if ROTATE_SUPPORT
+    twr_module_lcd_set_rotation(rotation);
+#endif
+
+    twr_module_lcd_clear();
+
+    twr_module_lcd_set_font(&twr_font_ubuntu_33);
+    snprintf(str_temperature, sizeof(str_temperature), "%.1f   ", temperature_event_param.value);
+    int x = twr_module_lcd_draw_string(20, 20, str_temperature, COLOR_BLACK);
+    temperature_on_display = temperature_event_param.value;
+
+    twr_module_lcd_set_font(&twr_font_ubuntu_24);
+    twr_module_lcd_draw_string(x - 20, 25, "\xb0" "C   ", COLOR_BLACK);
+
+    twr_module_lcd_set_font(&twr_font_ubuntu_15);
+    twr_module_lcd_draw_string(10, 80, "Set temperature", COLOR_BLACK);
+
+    snprintf(str_temperature, sizeof(str_temperature), "%.1f \xb0" "C", temperature_set_point.value);
+    twr_module_lcd_draw_string(40, 100, str_temperature, COLOR_BLACK);
+
+    twr_module_lcd_update();
+
+    twr_system_pll_disable();
+}
