@@ -1,5 +1,5 @@
-- [ ] Implement SLEEP and TIME_SETTING state transition (for now by only showing dummy value of 01:00)
-- [ ] Implement click functionality of TIME_SETTING state (including time values wrapping) and make sure transitions to SLEEP works correctly (in case time value will wrap back to 00:00)
-- [ ] Implement hold functionality of TIME_SETTING state and make sure transitions to SLEEP works correctly
-- [ ] Implement COUNTDOWN_ACTIVE state
-- [ ] Implement ALARM state
+- [x] Implement SLEEP and TIME_SETTING state transition (for now by only showing dummy value of 01:00)
+- [x] Implement click functionality of TIME_SETTING state (including time values wrapping) and make sure transitions to SLEEP works correctly (in case time value will wrap back to 00:00)
+- [x] Implement hold functionality of TIME_SETTING state and make sure transitions to SLEEP works correctly
+- [x] Implement COUNTDOWN_ACTIVE state
+- [x] Implement ALARM state

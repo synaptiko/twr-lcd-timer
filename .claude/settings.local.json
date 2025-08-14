@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ninja:*)",
+      "Bash(source:*)",
+      "Bash(bcf flash:*)",
+      "WebFetch(domain:docs.hardwario.com)"
+    ],
+    "deny": []
+  }
+}
