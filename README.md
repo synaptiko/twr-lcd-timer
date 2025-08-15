@@ -1,36 +1,23 @@
-<a href="https://www.hardwario.com/"><img src="https://www.hardwario.com/ci/assets/hw-logo.svg" width="200" alt="HARDWARIO Logo" align="right"></a>
+# Firmware for my custom LCD timer
 
-# Firmware for HARDWARIO Radio LCD Thermostat
+Based on HARDWARIO Radio LCD Thermostat
 
-[![build](https://github.com/hardwario/twr-radio-lcd-thermostat/actions/workflows/main.yml/badge.svg)](https://github.com/hardwario/twr-radio-lcd-thermostat/actions/workflows/main.yml)
-[![Release](https://img.shields.io/github/release/bigclownlabs/bcf-radio-lcd-thermostat.svg)](https://github.com/bigclownlabs/bcf-radio-lcd-thermostat/releases)
-[![License](https://img.shields.io/github/license/bigclownlabs/bcf-radio-lcd-thermostat.svg)](https://github.com/bigclownlabs/bcf-radio-lcd-thermostat/blob/master/LICENSE)
-[![Twitter](https://img.shields.io/twitter/follow/hardwario_en.svg?style=social&label=Follow)](https://twitter.com/hardwario_en)
+## Debug build
 
-See the project documentation on this link:
+```
+cmake -B obj/debug . -G Ninja -DTYPE=debug -DCMAKE_TOOLCHAIN_FILE=sdk/toolchain/toolchain.cmake
+ninja -C obj/debug
+```
 
-**https://developers.hardwario.com/projects/radio-lcd-thermostat/**
+## Release build
 
-## Build
+```
+cmake -B obj/release . -G Ninja -DTYPE=release -DCMAKE_TOOLCHAIN_FILE=sdk/toolchain/toolchain.cmake
+ninja -C obj/release
+```
 
-For build use this commands
+## Flash
 
-        make
-
-For build with LCD rotation support use this commands for core R2.x
-
-        make clean
-        make -j4 ROTATE_SUPPORT=1 CORE_R=2
-
-For build with LCD rotation support use this commands for core R1.3
-
-        make clean
-        make -j4 ROTATE_SUPPORT=1
-
-## License
-
-This project is licensed under the [MIT License](https://opensource.org/licenses/MIT/) - see the [LICENSE](LICENSE) file for details.
-
----
-
-Made with &#x2764;&nbsp; by [**HARDWARIO a.s.**](https://www.hardwario.com/) in the heart of Europe.
+```
+bcf flash --device /dev/tty.usbserial-1240 --skip-verify
+```
